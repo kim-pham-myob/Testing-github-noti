@@ -93,14 +93,11 @@ jobs:
 
             // Supports both Projects v2 and classic projects
             const query = `
-              query($owner: String!, $repo: String!, $prNumber: Int!) {
+              query ($owner: String!, $repo: String!, $pr_number: Int!) {
                 repository(owner: $owner, name: $repo) {
-                  pullRequest(number: $prNumber) {
-                    projectsV2(first: 5) {
-                      nodes {
-                        id
-                        title
-                      }
+                  pullRequest(number: $pr_number) {
+                    projectItems(first: 1) {
+                      totalCount
                     }
                   }
                 }
@@ -110,16 +107,14 @@ jobs:
             const variables = {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              prNumber: pr.number,
+              pr_number: pr.number,
             };
 
             const result = await github.graphql(query, variables);
 
-            const prData = result.repository.pullRequest;
+            const totalCount = result.repository.pullRequest.projectItems.totalCount;
 
-            const projectsV2 = (prData.projectsV2 && prData.projectsV2.nodes) || [];
-
-            const hasAnyProject = projectsV2 && projectsV2.length > 0
+            const hasAnyProject = totalCount > 0
 
             if (!hasAnyProject) {
               const message = `

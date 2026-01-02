@@ -1,20 +1,20 @@
-name: Validate PR Title and Assign
+name: PR Validation (Title, Assignee, Project)
 
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
 
 jobs:
-  validate-title-and-assign:
+  validate-title:
+    name: Validate PR Title
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: write    # needed to comment & assign
+      pull-requests: write   # to comment
       contents: read
+      issues: write
 
     steps:
       - name: Validate PR title format
-        id: validate_title
-        continue-on-error: true
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -22,38 +22,39 @@ jobs:
             const pr = context.payload.pull_request;
             const title = pr.title;
 
-            // Must contain [PRCTAX-<number>] exactly
+            // Must contain [PRCTAX-<number>]
             const pattern = /\[PRCTAX-\d+\]/;
 
             if (!pattern.test(title)) {
               const message = `
-                This pull request title does not match the required format:
-                \`[PRCTAX-{number}] Some description\`
+                Please update the PR' title to include the ticket number, at the beginning, with this format:
+                \`[PRCTAX-{number}]\`
                 `;
 
-              // Post comment to PR
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: pr.number,
                 body: message.trim(),
               });
-              core.setOutput('failed', 'true');
+
               core.setFailed(
                 `PR title "${title}" does not match required pattern [PRCTAX-{number}].`
               );
             } else {
-              core.setOutput('failed', 'false');
               core.info(`PR title "${title}" matches required pattern.`);
             }
 
-      - name: Record title validation result
-        id: record_title
-        run: |
-          echo "title_failed=${{ steps.validate_title.outputs.failed }}" >> $GITHUB_OUTPUT
+  auto-assign-author:
+    name: Auto‑assign PR to Author
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write   # to assign
+      contents: read
+      issues: write
 
-      - name: Assign PR to author
-        continue-on-error: true
+    steps:
+      - name: Assign PR to author (best effort)
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -61,37 +62,48 @@ jobs:
             const pr = context.payload.pull_request;
             const owner = pr.user.login;
 
-            await github.rest.issues.addAssignees({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr.number,
-              assignees: [owner],
-            });
+            const assignees = (pr.assignees || []).map(a => a.login);
+            if (assignees.includes(owner)) {
+              core.info(`PR #${pr.number} is already assigned to @${owner}.`);
+            } else {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                assignees: [owner],
+              });
+              core.info(`Assigned PR #${pr.number} to @${owner}.`);
+            }
 
-            core.info(`Assigned PR #${pr.number} to @${owner}.`);
-            
+  validate-project:
+    name: Validate Project Assignment
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write   # to comment
+      contents: read
+      issues: write
+      projects: read         # needed for Projects v2 / classic
+
+    steps:
       - name: Ensure PR is assigned to at least one project
-        id: validate_project
-        continue-on-error: true
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const pr = context.payload.pull_request;
 
-            // For Projects v2, check linked project items via GraphQL
+            // Supports both Projects v2 and classic projects
             const query = `
               query($owner: String!, $repo: String!, $prNumber: Int!) {
                 repository(owner: $owner, name: $repo) {
                   pullRequest(number: $prNumber) {
-                    id
-                    projectsV2(first: 5) {
+                    projectsV2(first: 10) {
                       nodes {
                         id
                         title
                       }
                     }
-                    projectItems(first: 5) {
+                    projectItems(first: 10) {
                       nodes {
                         id
                         project {
@@ -114,8 +126,8 @@ jobs:
 
             const prData = result.repository.pullRequest;
 
-            const projectsV2 = prData.projectsV2?.nodes || [];
-            const projectItems = prData.projectItems?.nodes || [];
+            const projectsV2 = (prData.projectsV2 && prData.projectsV2.nodes) || [];
+            const projectItems = (prData.projectItems && prData.projectItems.nodes) || [];
 
             const hasAnyProject =
               (projectsV2 && projectsV2.length > 0) ||
@@ -124,7 +136,11 @@ jobs:
             if (!hasAnyProject) {
               const message = `
                 This pull request is **not currently assigned to any project**.
-                Once a project is assigned, re-run the validation.`;
+
+                Please link this PR to an appropriate GitHub Project (via the Projects sidebar)
+                before merging.
+                Once a project is assigned, re-run this check
+              `;
 
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
@@ -132,45 +148,19 @@ jobs:
                 issue_number: pr.number,
                 body: message.trim(),
               });
-              core.setOutput('failed', 'true');
+
               core.setFailed(
-                'PR is not assigned to any project.'
+                'PR is not assigned to any project (Projects v2 or classic project items).'
               );
             } else {
               const projectNames = [
-                ...projectsV2.map(p => p.title),
+                ...projectsV2.map(p => p.title).filter(Boolean),
                 ...projectItems
                   .map(p => p.project && p.project.name)
                   .filter(Boolean),
               ];
+
               core.info(
                 `PR is linked to project(s): ${projectNames.join(', ') || '(names unavailable)'}`
               );
-              core.setOutput('failed', 'false');
             }
-      - name: Record project validation result
-        id: record_project
-        run: |
-          echo "project_failed=${{ steps.validate_project.outputs.failed }}" >> $GITHUB_OUTPUT
-
-      - name: Final gate – fail job if any validation failed
-        run: |
-          echo "Title failed:   ${{ steps.record_title.outputs.title_failed }}"
-          echo "Project failed: ${{ steps.record_project.outputs.project_failed }}"
-
-          FAILED=0
-
-          if [ "${{ steps.record_title.outputs.title_failed }}" = "true" ]; then
-            FAILED=1
-          fi
-
-          if [ "${{ steps.record_project.outputs.project_failed }}" = "true" ]; then
-            FAILED=1
-          fi
-
-          if [ "$FAILED" -ne 0 ]; then
-            echo "One or more validations failed. Failing job to block merge."
-            exit 1
-          else
-            echo "All validations passed."
-          fi

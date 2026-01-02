@@ -38,13 +38,19 @@ jobs:
                 issue_number: pr.number,
                 body: message.trim(),
               });
-
+              core.setOutput('failed', 'true');
               core.setFailed(
                 `PR title "${title}" does not match required pattern [PRCTAX-{number}].`
               );
             } else {
+              core.setOutput('failed', 'false');
               core.info(`PR title "${title}" matches required pattern.`);
             }
+
+      - name: Record title validation result
+        id: record_title
+        run: |
+          echo "title_failed=${{ steps.validate_title.outputs.failed }}" >> $GITHUB_OUTPUT
 
       - name: Assign PR to author
         continue-on-error: true
@@ -126,7 +132,7 @@ jobs:
                 issue_number: pr.number,
                 body: message.trim(),
               });
-
+              core.setOutput('failed', 'true');
               core.setFailed(
                 'PR is not assigned to any project.'
               );
@@ -137,8 +143,34 @@ jobs:
                   .map(p => p.project && p.project.name)
                   .filter(Boolean),
               ];
-
               core.info(
                 `PR is linked to project(s): ${projectNames.join(', ') || '(names unavailable)'}`
               );
+              core.setOutput('failed', 'false');
             }
+      - name: Record project validation result
+        id: record_project
+        run: |
+          echo "project_failed=${{ steps.validate_project.outputs.failed }}" >> $GITHUB_OUTPUT
+
+      - name: Final gate – fail job if any validation failed
+        run: |
+          echo "Title failed:   ${{ steps.record_title.outputs.title_failed }}"
+          echo "Project failed: ${{ steps.record_project.outputs.project_failed }}"
+
+          FAILED=0
+
+          if [ "${{ steps.record_title.outputs.title_failed }}" = "true" ]; then
+            FAILED=1
+          fi
+
+          if [ "${{ steps.record_project.outputs.project_failed }}" = "true" ]; then
+            FAILED=1
+          fi
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo "One or more validations failed. Failing job to block merge."
+            exit 1
+          else
+            echo "All validations passed."
+          fi

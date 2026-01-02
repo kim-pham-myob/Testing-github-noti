@@ -102,14 +102,6 @@ jobs:
                         title
                       }
                     }
-                    projectItems(first: 5) {
-                      nodes {
-                        id
-                        project {
-                          name
-                        }
-                      }
-                    }
                   }
                 }
               }
@@ -126,11 +118,8 @@ jobs:
             const prData = result.repository.pullRequest;
 
             const projectsV2 = (prData.projectsV2 && prData.projectsV2.nodes) || [];
-            const projectItems = (prData.projectItems && prData.projectItems.nodes) || [];
 
-            const hasAnyProject =
-              (projectsV2 && projectsV2.length > 0) ||
-              (projectItems && projectItems.length > 0);
+            const hasAnyProject = projectsV2 && projectsV2.length > 0
 
             if (!hasAnyProject) {
               const message = `

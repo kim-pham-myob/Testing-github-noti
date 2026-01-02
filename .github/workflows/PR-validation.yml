@@ -6,7 +6,7 @@ on:
 
 jobs:
   validate-title:
-    name: Validate PR Title
+    name: Check PR Title
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write   # to comment
@@ -76,59 +76,26 @@ jobs:
             }
 
   validate-project:
-    name: Validate Project Assignment
+    name: Check if a project is assigned
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: write   # to comment
       contents: read
       issues: write
-
+      
     steps:
       - name: Ensure PR is assigned to at least one project
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const pr = context.payload.pull_request;
-            // Supports both Projects v2 and classic projects
-            const query = `
-              query ($owner: String!, $repo: String!, $pr_number: Int!) {
-                repository(owner: $owner, name: $repo) {
-                  pullRequest(number: $pr_number) {
-                    projectItems(first: 1) {
-                      totalCount
-                    }
-                  }
-                }
-              }
-            `;
+          run: |
+           PR_NUM=${{ github.event.pull_request.number }}
+          
+            # Use gh pr view with --json to get project information
+           COUNT=$(gh pr view $PR_NUM --json projectItems --jq '.projectItems | length')
 
-            const variables = {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pr_number: pr.number,
-            };
-
-            const result = await github.graphql(query, variables);
-            const totalCount = result.repository.pullRequest.projectItems.totalCount;
-
-            if (totalCount === 0) {
-              const message = `
-                This pull request is **not currently assigned to any project**.
-
-                Please link this PR to an appropriate GitHub Project (via the Projects sidebar)
-                before merging.
-                Once a project is assigned, re-run this check
-              `;
-
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr.number,
-                body: message.trim(),
-              });
-
-              core.setFailed(
-                'PR is not assigned to any project (Projects v2 or classic project items).'
-              );
-            }
+           if [ "$COUNT" -eq 0 ]; then
+             echo "::error::PR #$PR_NUM is not assigned to any Project v2 board."
+             exit 1
+           else
+             echo "Success: PR is assigned to $COUNT project(s)."
+           fi

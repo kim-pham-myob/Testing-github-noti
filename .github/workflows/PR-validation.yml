@@ -90,7 +90,10 @@ jobs:
            PR_NUM=${{ github.event.pull_request.number }}
           
             # Use gh pr view with --json to get project information
-           COUNT=$(gh pr view $PR_NUM --json projectItems --jq '.projectItems | length')
+           COUNT=$(gh pr view ${{ github.event.pull_request.number }} \
+              --repo ${{ github.repository }} \
+              --json projectItems --jq '.projectItems | length')
+
 
            if [ "$COUNT" -eq 0 ]; then
              echo "::error::PR #$PR_NUM is not assigned to any Project v2 board."

@@ -1,34 +1,57 @@
-name: Auto-assign PR with PRCTAX tag
+name: Validate PR Title and Assign
 
 on:
   pull_request:
-    types: [opened, edited, reopened]
+    types: [opened, edited, reopened, synchronize]
 
 jobs:
-  check-title-and-assign:
+  validate-title-and-assign:
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: write
+      pull-requests: write    # needed to comment & assign
+      contents: read
+
     steps:
-      - name: Check title and assign author
-        if: contains(github.event.pull_request.title, '[PRCTAX-')
+      - name: Validate PR title format
+        id: validate_title
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const pr = context.payload.pull_request;
+            const title = pr.title;
 
-            // Simple regex: [PRCTAX-<number>]
+            // Must contain [PRCTAX-<number>] exactly
             const pattern = /\[PRCTAX-\d+\]/;
 
-            if (!pattern.test(pr.title)) {
-              core.info(`PR title "${pr.title}" does not include [PRCTAX-{number}]`);
-              return;
+            if (!pattern.test(title)) {
+              const message = `
+                This pull request title does not match the required format:
+                \`[PRCTAX-{number}] Some description\`
+                `;
+
+              // Post comment to PR
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: message.trim(),
+              });
+
+              core.setFailed(
+                `PR title "${title}" does not match required pattern [PRCTAX-{number}].`
+              );
+            } else {
+              core.info(`PR title "${title}" matches required pattern.`);
             }
 
+      - name: Assign PR to author
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
             const owner = pr.user.login;
-
-            core.info(`Assigning PR #${pr.number} to ${owner}`);
 
             await github.rest.issues.addAssignees({
               owner: context.repo.owner,
@@ -36,3 +59,5 @@ jobs:
               issue_number: pr.number,
               assignees: [owner],
             });
+
+            core.info(`Assigned PR #${pr.number} to @${owner}.`);

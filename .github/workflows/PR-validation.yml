@@ -90,7 +90,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const pr = context.payload.pull_request;
-
+            core.info(pr);
             // Supports both Projects v2 and classic projects
             const query = `
               query ($owner: String!, $repo: String!, $pr_number: Int!) {
@@ -111,7 +111,7 @@ jobs:
             };
 
             const result = await github.graphql(query, variables);
-
+            core.info(result)
             const totalCount = result.repository.pullRequest.projectItems.totalCount;
 
             const hasAnyProject = totalCount > 0

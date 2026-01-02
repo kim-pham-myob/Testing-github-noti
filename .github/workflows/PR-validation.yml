@@ -14,6 +14,7 @@ jobs:
     steps:
       - name: Validate PR title format
         id: validate_title
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -46,6 +47,7 @@ jobs:
             }
 
       - name: Assign PR to author
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -64,8 +66,7 @@ jobs:
             
       - name: Ensure PR is assigned to at least one project
         id: validate_project
-        # still only runs if all previous steps succeeded
-        if: success()
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

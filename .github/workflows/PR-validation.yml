@@ -61,3 +61,83 @@ jobs:
             });
 
             core.info(`Assigned PR #${pr.number} to @${owner}.`);
+            
+      - name: Ensure PR is assigned to at least one project
+        id: validate_project
+        # still only runs if all previous steps succeeded
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+
+            // For Projects v2, check linked project items via GraphQL
+            const query = `
+              query($owner: String!, $repo: String!, $prNumber: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $prNumber) {
+                    id
+                    projectsV2(first: 5) {
+                      nodes {
+                        id
+                        title
+                      }
+                    }
+                    projectItems(first: 5) {
+                      nodes {
+                        id
+                        project {
+                          name
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            const variables = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              prNumber: pr.number,
+            };
+
+            const result = await github.graphql(query, variables);
+
+            const prData = result.repository.pullRequest;
+
+            const projectsV2 = prData.projectsV2?.nodes || [];
+            const projectItems = prData.projectItems?.nodes || [];
+
+            const hasAnyProject =
+              (projectsV2 && projectsV2.length > 0) ||
+              (projectItems && projectItems.length > 0);
+
+            if (!hasAnyProject) {
+              const message = `
+                This pull request is **not currently assigned to any project**.
+                Once a project is assigned, re-run the validation.`;
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: message.trim(),
+              });
+
+              core.setFailed(
+                'PR is not assigned to any project.'
+              );
+            } else {
+              const projectNames = [
+                ...projectsV2.map(p => p.title),
+                ...projectItems
+                  .map(p => p.project && p.project.name)
+                  .filter(Boolean),
+              ];
+
+              core.info(
+                `PR is linked to project(s): ${projectNames.join(', ') || '(names unavailable)'}`
+              );
+            }

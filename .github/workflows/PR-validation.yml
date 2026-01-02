@@ -82,7 +82,6 @@ jobs:
       pull-requests: write   # to comment
       contents: read
       issues: write
-      projects: read         # needed for Projects v2 / classic
 
     steps:
       - name: Ensure PR is assigned to at least one project

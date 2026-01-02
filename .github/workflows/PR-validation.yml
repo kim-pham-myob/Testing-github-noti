@@ -1,4 +1,4 @@
-name: PR Validation (Title, Assignee, Project)
+name: PR Validation
 
 on:
   pull_request:
@@ -96,13 +96,13 @@ jobs:
               query($owner: String!, $repo: String!, $prNumber: Int!) {
                 repository(owner: $owner, name: $repo) {
                   pullRequest(number: $prNumber) {
-                    projectsV2(first: 10) {
+                    projectsV2(first: 5) {
                       nodes {
                         id
                         title
                       }
                     }
-                    projectItems(first: 10) {
+                    projectItems(first: 5) {
                       nodes {
                         id
                         project {
@@ -150,16 +150,5 @@ jobs:
 
               core.setFailed(
                 'PR is not assigned to any project (Projects v2 or classic project items).'
-              );
-            } else {
-              const projectNames = [
-                ...projectsV2.map(p => p.title).filter(Boolean),
-                ...projectItems
-                  .map(p => p.project && p.project.name)
-                  .filter(Boolean),
-              ];
-
-              core.info(
-                `PR is linked to project(s): ${projectNames.join(', ') || '(names unavailable)'}`
               );
             }

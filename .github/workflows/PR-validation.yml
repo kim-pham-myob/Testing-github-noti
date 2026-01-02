@@ -85,7 +85,7 @@ jobs:
     steps:
       - name: Ensure PR is assigned to at least one project
         env: 
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
            PR_NUM=${{ github.event.pull_request.number }}
           

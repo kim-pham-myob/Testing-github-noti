@@ -22,13 +22,13 @@ jobs:
             const pr = context.payload.pull_request;
             const title = pr.title;
 
-            // Must contain [PRCTAX-<number>]
-            const pattern = /\[PRCTAX-\d+\]/;
+            // Must contain PRCTAX-<number>
+            const pattern = PRCTAX-\d+;
 
             if (!pattern.test(title)) {
               const message = `
                 Please update the PR' title to include the ticket number, at the beginning, with this format:
-                \`[PRCTAX-{number}]\`
+                \`PRCTAX-{number}\`
                 `;
 
               await github.rest.issues.createComment({

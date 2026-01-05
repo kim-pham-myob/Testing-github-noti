@@ -1,1 +1,46 @@
+name: PR Validation
 
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  validate-title:
+    name: Check PR Title
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write   # to comment
+      contents: read
+      issues: write
+
+    steps:
+      - name: Validate PR title format
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const title = pr.title;
+
+            // Must contain [PRCTAX-<number>]
+            const pattern = /\[PRCTAX-\d+\]/;
+
+            if (!pattern.test(title)) {
+              const message = `
+                Please update the PR' title to include the ticket number, at the beginning, with this format:
+                \`[PRCTAX-{number}]\`
+                `;
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: message.trim(),
+              });
+
+              core.setFailed(
+                `PR title "${title}" does not match required pattern [PRCTAX-{number}].`
+              );
+            } else {
+              core.info(`PR title "${title}" matches required pattern.`);
+            }

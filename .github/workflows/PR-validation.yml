@@ -23,7 +23,7 @@ jobs:
             const title = pr.title;
 
             // Must contain PRCTAX-<number>
-            const pattern = PRCTAX-\d+;
+            const pattern = /PRCTAX-\d+/;
 
             if (!pattern.test(title)) {
               const message = `
@@ -39,7 +39,7 @@ jobs:
               });
 
               core.setFailed(
-                `PR title "${title}" does not match required pattern [PRCTAX-{number}].`
+                `PR title "${title}" does not match required pattern PRCTAX-{number}.`
               );
             } else {
               core.info(`PR title "${title}" matches required pattern.`);
